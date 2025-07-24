@@ -1,152 +1,244 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import shap
-import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (
+    Input, Conv1D, MaxPooling1D, GlobalAveragePooling1D,
+    Dense, Dropout, BatchNormalization
+)
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    accuracy_score, classification_report, confusion_matrix,
+    roc_auc_score, roc_curve
+)
+import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve, accuracy_score
-from streamlit_shap import st_shap
 
-st.set_page_config(page_title="Ghosting Prediction App", layout="wide")
-st.title("💘 Ghosting Prediction in Dating Apps")
-st.markdown("An AI-powered Streamlit tool to analyze, model, and predict ghosting behavior.")
+# --- App Configuration ---
+st.set_page_config(page_title="Exoplanet Discovery Model Comparison", layout="wide")
+st.set_option('deprecation.showPyplotGlobalUse', False)
 
-# Sidebar navigation
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to", [
-    "📁 Data Upload & Overview",
-    "📊 Data Preprocessing",
-    "🧠 Model Training (XGBoost)",
-    "📈 Model Evaluation",
-    "🤖 Live Prediction",
-    "🔍 SHAP Interpretability"
-])
+# --- Title and Description ---
+st.title("🌌 Exoplanet Discovery: CNN vs. XGBoost")
+st.markdown("""
+This application analyzes Kepler telescope data to classify exoplanet candidates.
+It trains and compares two different models: a **1D Convolutional Neural Network (CNN)** and an **XGBoost Classifier**.
+- **CNN**: Ideal for learning features directly from time-series data like light flux curves.
+- **XGBoost**: A powerful gradient boosting algorithm effective on tabular data.
 
-# Session state
-if 'model' not in st.session_state:
-    st.session_state.model = None
-if 'X_test' not in st.session_state:
-    st.session_state.X_test = None
-if 'y_test' not in st.session_state:
-    st.session_state.y_test = None
-if 'X_scaled' not in st.session_state:
-    st.session_state.X_scaled = None
-if 'y' not in st.session_state:
-    st.session_state.y = None
+**Instructions:** Click the "Train and Evaluate Models" button in the sidebar to start the process.
+""")
 
-# 1. Data Upload
-if page == "📁 Data Upload & Overview":
-    st.header("📁 Upload Your Dataset")
-    uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.session_state.df = df
-        st.success("Data uploaded successfully!")
-        st.dataframe(df.head(10))
-        st.write("### Basic Info")
-        st.write(df.describe())
-        st.write("### Missing Values")
-        st.write(df.isnull().sum())
+# --- Caching Functions for Performance ---
 
-# 2. Preprocessing
-elif page == "📊 Data Preprocessing":
-    st.header("📊 Data Preprocessing")
-    if 'df' in st.session_state:
-        df = st.session_state.df.dropna()
-        st.write("✅ Dropped missing values.")
-        st.dataframe(df.head())
+@st.cache_data
+def load_data():
+    """Loads the training and test datasets."""
+    try:
+        raw_train_data = pd.read_csv("exoTrain.csv")
+        raw_test_data = pd.read_csv("exoTest.csv")
+        return raw_train_data, raw_test_data
+    except FileNotFoundError:
+        st.error("Error: `exoTrain.csv` or `exoTest.csv` not found. Please place them in the same directory as this script.")
+        return None, None
 
-        X = df.drop(columns=['Match_Outcome'])  # <-- change target if needed
-        y = df['Match_Outcome']
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X.select_dtypes(include=[np.number]))
+@st.cache_data
+def preprocess_data(_train_df, _test_df):
+    """Preprocesses the data: separates features and labels, scales features."""
+    # Prepare data
+    X_train = _train_df.drop('LABEL', axis=1)
+    y_train = _train_df['LABEL'] - 1  # Convert labels to 0 and 1
+    X_test = _test_df.drop('LABEL', axis=1)
+    y_test = _test_df['LABEL'] - 1
 
-        st.session_state.X_scaled = X_scaled
-        st.session_state.y = y
-        st.success("✅ Preprocessing complete. Data is scaled and ready.")
-    else:
-        st.warning("⚠️ Please upload your dataset first.")
+    # Scale features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
 
-# 3. Model Training
-elif page == "🧠 Model Training (XGBoost)":
-    st.header("🧠 Train XGBoost Model")
-    if st.session_state.X_scaled is not None and st.session_state.y is not None:
-        X_train, X_test, y_train, y_test = train_test_split(
-            st.session_state.X_scaled, st.session_state.y, test_size=0.2, stratify=st.session_state.y, random_state=42)
-        
-        model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss')
-        model.fit(X_train, y_train)
-        st.success("✅ Model trained successfully!")
-        
-        st.session_state.model = model
-        st.session_state.X_test = X_test
-        st.session_state.y_test = y_test
+    # Reshape for CNN
+    X_train_cnn = X_train_scaled.reshape(X_train_scaled.shape[0], X_train_scaled.shape[1], 1)
+    X_test_cnn = X_test_scaled.reshape(X_test_scaled.shape[0], X_test_scaled.shape[1], 1)
 
-        st.write("### Feature Importance")
-        xgb.plot_importance(model)
-        st.pyplot()
-    else:
-        st.warning("⚠️ Please preprocess the data first.")
+    return X_train_scaled, y_train, X_test_scaled, y_test, X_train_cnn, X_test_cnn
 
-# 4. Evaluation
-elif page == "📈 Model Evaluation":
-    st.header("📈 Model Evaluation")
-    model = st.session_state.model
-    X_test = st.session_state.X_test
-    y_test = st.session_state.y_test
-    if model is not None and X_test is not None:
-        y_pred = model.predict(X_test)
-        st.subheader("📊 Confusion Matrix")
-        cm = confusion_matrix(y_test, y_pred)
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
-        st.pyplot()
+def build_cnn_model(input_shape):
+    """Builds the 1D CNN model architecture."""
+    input_layer = Input(shape=input_shape)
+    x = Conv1D(filters=32, kernel_size=5, activation='relu', padding='same')(input_layer)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D(pool_size=2)(x)
 
-        st.subheader("📄 Classification Report")
-        st.text(classification_report(y_test, y_pred))
+    x = Conv1D(filters=64, kernel_size=5, activation='relu', padding='same')(x)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D(pool_size=2)(x)
 
-        st.subheader("📉 ROC Curve")
-        y_proba = model.predict_proba(X_test)[:,1]
-        fpr, tpr, _ = roc_curve(y_test, y_proba)
-        auc = roc_auc_score(y_test, y_proba)
-        plt.figure()
-        plt.plot(fpr, tpr, label=f'AUC = {auc:.2f}')
-        plt.plot([0,1],[0,1],'k--')
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.title("ROC Curve")
-        plt.legend(loc="lower right")
-        st.pyplot()
-    else:
-        st.warning("⚠️ Train the model first.")
+    x = Conv1D(filters=128, kernel_size=5, activation='relu', padding='same')(x)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D(pool_size=2)(x)
 
-# 5. Live Prediction
-elif page == "🤖 Live Prediction":
-    st.header("🤖 Live Prediction")
-    model = st.session_state.model
-    if model is not None:
-        st.write("Upload new data (same format, no label):")
-        new_file = st.file_uploader("Upload new user CSV", key="predict_upload")
-        if new_file:
-            new_data = pd.read_csv(new_file)
-            X_new = StandardScaler().fit_transform(new_data.select_dtypes(include=[np.number]))
-            pred = model.predict(X_new)
-            st.write("### Predictions")
-            st.write(pred)
-    else:
-        st.warning("⚠️ Model not trained yet.")
+    x = GlobalAveragePooling1D()(x)
+    x = Dense(128, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    output_layer = Dense(1, activation='sigmoid')(x)
 
-# 6. SHAP Explainability
-elif page == "🔍 SHAP Interpretability":
-    st.header("🔍 SHAP Explainability")
-    model = st.session_state.model
-    X_test = st.session_state.X_test
-    if model is not None and X_test is not None:
-        explainer = shap.Explainer(model)
-        shap_values = explainer(X_test)
-        st.subheader("📌 SHAP Summary Plot")
-        st_shap(shap.plots.beeswarm(shap_values), height=400)
-    else:
-        st.warning("⚠️ Train the model first to view SHAP explanations.")
+    model = Model(inputs=input_layer, outputs=output_layer)
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+@st.cache_resource
+def train_models(X_train_scaled, y_train, X_test_scaled, y_test, X_train_cnn, X_test_cnn):
+    """Trains both CNN and XGBoost models and returns them."""
+    # --- Train CNN ---
+    with st.spinner('Training CNN Model... This might take a few minutes.'):
+        cnn_model = build_cnn_model((X_train_cnn.shape[1], 1))
+        early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
+        cnn_model.fit(X_train_cnn, y_train,
+                      validation_data=(X_test_cnn, y_test),
+                      epochs=20,  # Reduced epochs for faster app demo
+                      batch_size=64,
+                      callbacks=[early_stopping, reduce_lr],
+                      verbose=0) # Set verbose to 0 for cleaner Streamlit output
+    st.success('CNN Model Trained!')
+
+    # --- Train XGBoost ---
+    with st.spinner('Training XGBoost Model...'):
+        xgb_model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='logloss', use_label_encoder=False, n_estimators=100)
+        xgb_model.fit(X_train_scaled, y_train,
+                      eval_set=[(X_test_scaled, y_test)],
+                      early_stopping_rounds=10,
+                      verbose=False)
+    st.success('XGBoost Model Trained!')
+
+    return cnn_model, xgb_model
+
+def plot_roc_curve(y_true, y_pred_proba, model_name, ax):
+    """Plots a single ROC curve on a given matplotlib axes."""
+    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+    auc = roc_auc_score(y_true, y_pred_proba)
+    ax.plot(fpr, tpr, label=f'{model_name} (AUC = {auc:.3f})')
+
+# --- Main App Logic ---
+raw_train_data, raw_test_data = load_data()
+
+if raw_train_data is not None:
+    # Sidebar
+    st.sidebar.header("Model Controls")
+    if st.sidebar.button("Train and Evaluate Models"):
+        st.header("📊 Model Performance Evaluation")
+
+        # Preprocess data
+        X_train_scaled, y_train, X_test_scaled, y_test, X_train_cnn, X_test_cnn = preprocess_data(raw_train_data, raw_test_data)
+
+        # Train models
+        cnn_model, xgb_model = train_models(X_train_scaled, y_train, X_test_scaled, y_test, X_train_cnn, X_test_cnn)
+
+        # --- Predictions ---
+        y_pred_proba_cnn = cnn_model.predict(X_test_cnn, verbose=0).ravel()
+        y_pred_cnn = (y_pred_proba_cnn > 0.5).astype(int)
+
+        y_pred_proba_xgb = xgb_model.predict_proba(X_test_scaled)[:, 1]
+        y_pred_xgb = (y_pred_proba_xgb > 0.5).astype(int)
+
+        # --- Display Results in Tabs ---
+        tab1, tab2, tab3 = st.tabs(["🧠 CNN Results", "🌳 XGBoost Results", "🚀 Model Comparison"])
+
+        with tab1:
+            st.subheader("1D Convolutional Neural Network (CNN)")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Accuracy", f"{accuracy_score(y_test, y_pred_cnn):.2%}")
+                st.text("Classification Report:")
+                st.text(classification_report(y_test, y_pred_cnn, target_names=['Not Exoplanet', 'Exoplanet']))
+            with col2:
+                st.text("Confusion Matrix:")
+                cm = confusion_matrix(y_test, y_pred_cnn)
+                fig, ax = plt.subplots(figsize=(5, 4))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'], ax=ax)
+                plt.ylabel('Actual')
+                plt.xlabel('Predicted')
+                st.pyplot(fig)
+
+        with tab2:
+            st.subheader("XGBoost Classifier")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Accuracy", f"{accuracy_score(y_test, y_pred_xgb):.2%}")
+                st.text("Classification Report:")
+                st.text(classification_report(y_test, y_pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
+            with col2:
+                st.text("Confusion Matrix:")
+                cm = confusion_matrix(y_test, y_pred_xgb)
+                fig, ax = plt.subplots(figsize=(5, 4))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'], ax=ax)
+                plt.ylabel('Actual')
+                plt.xlabel('Predicted')
+                st.pyplot(fig)
+
+        with tab3:
+            st.subheader("Performance Comparison")
+
+            # --- Comparison Table ---
+            report_cnn = classification_report(y_test, y_pred_cnn, output_dict=True)
+            report_xgb = classification_report(y_test, y_pred_xgb, output_dict=True)
+
+            comparison_data = {
+                'Metric': ['Accuracy', 'Precision (Exoplanet)', 'Recall (Exoplanet)', 'F1-Score (Exoplanet)'],
+                'CNN': [
+                    report_cnn['accuracy'],
+                    report_cnn['Exoplanet']['precision'],
+                    report_cnn['Exoplanet']['recall'],
+                    report_cnn['Exoplanet']['f1-score']
+                ],
+                'XGBoost': [
+                    report_xgb['accuracy'],
+                    report_xgb['Exoplanet']['precision'],
+                    report_xgb['Exoplanet']['recall'],
+                    report_xgb['Exoplanet']['f1-score']
+                ]
+            }
+            comparison_df = pd.DataFrame(comparison_data)
+            st.dataframe(comparison_df.style.format({'CNN': '{:.3f}', 'XGBoost': '{:.3f}'}), use_container_width=True)
+
+            # --- Combined ROC Curve ---
+            st.subheader("Receiver Operating Characteristic (ROC) Curve")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            plot_roc_curve(y_test, y_pred_proba_cnn, 'CNN', ax)
+            plot_roc_curve(y_test, y_pred_proba_xgb, 'XGBoost', ax)
+            ax.plot([0, 1], [0, 1], 'k--', label='Chance')
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('Model ROC Curve Comparison')
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
+
+    # --- Data Exploration Section ---
+    st.sidebar.header("Data Exploration")
+    if st.sidebar.checkbox("Show Raw Data"):
+        st.header("🔭 Raw Data Preview")
+        st.dataframe(raw_train_data.head())
+
+    if st.sidebar.checkbox("Show Light Curve Examples"):
+        st.header("📈 Light Curve Examples")
+        st.markdown("Randomly selected light curves from the training data. 'Confirmed' indicates a star with a confirmed exoplanet.")
+        num_samples = 3
+        sample_indices = np.random.choice(raw_train_data.shape[0], num_samples, replace=False)
+
+        for idx in sample_indices:
+            label = raw_train_data.iloc[idx]['LABEL']
+            flux_values = raw_train_data.iloc[idx, 1:]
+            fig, ax = plt.subplots(figsize=(14, 4))
+            ax.plot(flux_values, label=f"Sample #{idx} | Label: {'Confirmed' if label == 2 else 'False Positive'}")
+            ax.set_xlabel("Time Step")
+            ax.set_ylabel("Flux (Brightness)")
+            ax.set_title(f"Light Curve for Sample #{idx}")
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
+
