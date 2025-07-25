@@ -35,7 +35,7 @@ def load_csv_from_drive(file_id, file_name):
 # 📂 File IDs (replace with your actual IDs)
 summary_id = "1ko0CO920amqyw6Trc3Xxp1Z72l4xC5Fc"
 train_id   = "1MxDUIqQ6S9cmi068I62xkbCwZHkpAeJI" # Your 250MB file
-test_id    = "1d3bAfqatHaUW1Rhc70YHW_Ay_co_ZmVu"
+test_id    = "1d3bAfqatHaUWlRhc70YHW"
 
 st.set_page_config(layout="wide") # Use wide layout for better display of plots/tables
 st.title("Exoplanet Detection Model Dashboard")
