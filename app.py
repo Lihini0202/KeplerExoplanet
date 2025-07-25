@@ -20,8 +20,7 @@ def load_csv_from_drive(file_id):
 # 📂 File IDs (replace with your actual IDs)
 summary_id = "1ko0CO920amqyw6Trc3Xxp1Z72l4xC5Fc"
 train_id   = "1MxDUIqQ6S9cmi068I62xkbCwZHkpAeJI"
-test_id    = "1d3bAfqatHaUW1Rhc70YHW_Ay_co_ZmVu" # Corrected test_id from the image
-
+test_id    = "1d3bAfqatHaUWlRhc70YHW_Ay_co_ZmVu"
 # 📊 Load data
 summary_data = load_csv_from_drive(summary_id)
 train_data   = load_csv_from_drive(train_id)
