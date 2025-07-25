@@ -17,7 +17,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 @st.cache_data
 def load_csv_from_drive(file_id, file_name):
     # Ensure this URL is correct for direct download, especially for large files
-    . url = f"https://drive.google.com/drive/folders/18aZH5HeJlQ0Z7q8AYdy049ErBnJKs49U?usp=drive_link={file_id}"
+    url = f"https://drive.google.com/drive/folders/18aZH5HeJlQ0Z7q8AYdy049ErBnJKs49U?usp=drive_link={file_id}"
     try:
         df = pd.read_csv(url)
         st.success(f"✅ Loaded {file_name} from Google Drive!")
