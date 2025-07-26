@@ -10,7 +10,6 @@ from tensorflow.keras.layers import Input, Conv1D, MaxPooling1D, GlobalAveragePo
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
 import xgboost as xgb
-import requests
 import os
 
 # --- Page Configuration ---
@@ -21,69 +20,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- MODIFIED HELPER FUNCTION ---
-def download_file_from_google_drive(id, destination):
-    """
-    Handles downloading files from Google Drive, including the confirmation
-    step for large files that trigger a virus scan warning.
-    """
-    URL = "https://docs.google.com/uc?export=download"
-    session = requests.Session()
-
-    # Initial request to get the confirmation token
-    response = session.get(URL, params={'id': id}, stream=True)
-    token = None
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            token = value
-            break
-    
-    # If a token was found, make a second request with the confirmation
-    if token:
-        params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 1024
-    
-    progress_bar = st.progress(0, text=f"Downloading {os.path.basename(destination)}...")
-    bytes_written = 0
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(block_size):
-            if chunk:
-                f.write(chunk)
-                bytes_written += len(chunk)
-                progress_value = min(bytes_written / total_size, 1.0) if total_size > 0 else 0
-                # Update progress bar text and value
-                if total_size > 0:
-                    mb_written = bytes_written / (1024 * 1024)
-                    total_mb = total_size / (1024 * 1024)
-                    progress_text = f"Downloading {os.path.basename(destination)}... {mb_written:.1f}MB / {total_mb:.1f}MB"
-                else:
-                    progress_text = f"Downloading {os.path.basename(destination)}..."
-                progress_bar.progress(progress_value, text=progress_text)
-    
-    # Ensure the progress bar completes and then disappears
-    progress_bar.progress(1.0, text=f"Download complete: {os.path.basename(destination)}")
-    st.balloons() # A little celebration for a successful download
-    progress_bar.empty()
-
-# --- Caching and Data Loading ---
+# --- Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
 def load_data():
-    data_dir = 'data'
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-
-    file_ids = {
-        os.path.join(data_dir, "cumulative.csv"): "1ko0CO920amqyw6Trc3Xxp1Z72l4xC5Fc",
-        os.path.join(data_dir, "exoTrain.csv"): "1MxDUIqQ6S9cmi068I62xkbCwZHkpAeJI",
-        os.path.join(data_dir, "exoTest.csv"): "1d3bAfqatHaUWlRhc70YHW_Ay_co_ZmVu"
-    }
-
-    for filepath, file_id in file_ids.items():
-        if not os.path.exists(filepath):
-            download_file_from_google_drive(file_id, filepath)
+    data_dir = 'datasets'  # local folder inside your repo containing the CSV files
 
     summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
     train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
@@ -93,13 +33,12 @@ def load_data():
 # --- Model Training and Caching ---
 @st.cache_resource(show_spinner="Training models... this can take a few minutes.")
 def train_and_evaluate_models(_train_df, _test_df):
-    # Prepare data inside the function to ensure cache safety
     y_train = _train_df['LABEL'].values - 1
     X_train = _train_df.drop('LABEL', axis=1).values
-    
+
     # CNN Model
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
-    
+
     inp = Input(shape=(X_train_cnn.shape[1], 1))
     x = Conv1D(64, 5, activation='relu', padding='same')(inp)
     x = BatchNormalization()(x)
@@ -112,15 +51,15 @@ def train_and_evaluate_models(_train_df, _test_df):
     x = Dropout(0.5)(x)
     out = Dense(1, activation='sigmoid')(x)
     model_cnn = Model(inp, out)
-    
+
     model_cnn.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-    model_cnn.fit(X_train_cnn, y_train, epochs=20, batch_size=64, validation_split=0.2, 
+    model_cnn.fit(X_train_cnn, y_train, epochs=20, batch_size=64, validation_split=0.2,
                   callbacks=[EarlyStopping(patience=5, restore_best_weights=True)], verbose=0)
-    
+
     # XGBoost Model
     model_xgb = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss', n_estimators=150, learning_rate=0.1, max_depth=5)
     model_xgb.fit(X_train, y_train)
-    
+
     return model_cnn, model_xgb
 
 # --- Pages ---
@@ -131,13 +70,13 @@ def home():
         """
         This interactive application allows you to explore the fascinating dataset from NASA's Kepler mission,
         which has been instrumental in discovering thousands of exoplanets.
-        
+
         ### What can you do here?
         - **Explore Datasets**: View the raw data from the Kepler mission.
         - **Analyze Visually**: Dive deep into the data with interactive charts and plots.
         - **Train Models**: Build and evaluate powerful machine learning models (CNN and XGBoost) to classify exoplanet candidates.
         - **Make Predictions**: Use the trained models to predict whether a star is likely to host an exoplanet.
-        
+
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
@@ -146,7 +85,7 @@ def home():
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
     st.markdown("---")
-    
+
     st.subheader("Kepler Objects of Interest (KOI) Summary Data")
     st.dataframe(summary)
     with st.expander("Show Summary Statistics"):
@@ -163,7 +102,7 @@ def data_explorer(summary, train, test):
 def visual_analytics(summary):
     st.header("📈 Visual Analytics")
     st.markdown("---")
-    
+
     st.subheader("1. KOI Disposition Analysis")
     col1, col2 = st.columns(2)
     with col1:
@@ -176,7 +115,7 @@ def visual_analytics(summary):
         fig, ax = plt.subplots()
         ax.pie(disposition_counts, labels=disposition_counts.index, autopct='%1.1f%%', startangle=90, colors=sns.color_palette('viridis'))
         ax.set_title("Proportion of KOI Dispositions")
-        ax.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
+        ax.axis('equal') # Equal aspect ratio ensures pie is drawn as a circle.
         st.pyplot(fig)
 
     st.subheader("2. Planet Characteristics")
@@ -189,9 +128,8 @@ def visual_analytics(summary):
         st.pyplot(fig)
     with col2:
         fig, ax = plt.subplots()
-        # Filter out extreme outliers for a better plot, but keep log scale
         s_period = summary['koi_period'].dropna()
-        s_period = s_period[s_period < 2000] # Adjust this value if needed
+        s_period = s_period[s_period < 2000]  # filter extreme outliers
         sns.histplot(s_period, ax=ax, kde=True, bins=30, color='orchid', log_scale=True)
         ax.set_title("Orbital Period Distribution (Days, Log Scale)")
         ax.set_xlabel("Orbital Period")
@@ -211,16 +149,15 @@ def model_performance(train_df, test_df):
     st.markdown("---")
 
     model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
-    
+
     y_test = test_df['LABEL'].values - 1
     X_test = test_df.drop('LABEL', axis=1).values
-    
-    # Get predictions
+
     pred_cnn_proba = model_cnn.predict(X_test.reshape(X_test.shape[0], X_test.shape[1], 1)).ravel()
     pred_cnn = (pred_cnn_proba > 0.5).astype(int)
     pred_xgb_proba = model_xgb.predict_proba(X_test)[:, 1]
     pred_xgb = (pred_xgb_proba > 0.5).astype(int)
-    
+
     st.subheader("Model Accuracy Scores")
     col1, col2 = st.columns(2)
     acc_cnn = accuracy_score(y_test, pred_cnn)
@@ -231,7 +168,7 @@ def model_performance(train_df, test_df):
         st.metric("XGBoost Accuracy", f"{acc_xgb:.2%}")
 
     tab1, tab2, tab3 = st.tabs(["Classification Reports", "Confusion Matrices", "ROC Curve"])
-    
+
     with tab1:
         st.subheader("Classification Reports")
         col1, col2 = st.columns(2)
@@ -248,7 +185,9 @@ def model_performance(train_df, test_df):
         with col1:
             cm_cnn = confusion_matrix(y_test, pred_cnn)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
+            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax,
+                        xticklabels=['Not Exoplanet', 'Exoplanet'],
+                        yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('CNN Confusion Matrix')
             ax.set_xlabel('Predicted')
             ax.set_ylabel('Actual')
@@ -256,12 +195,14 @@ def model_performance(train_df, test_df):
         with col2:
             cm_xgb = confusion_matrix(y_test, pred_xgb)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
+            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax,
+                        xticklabels=['Not Exoplanet', 'Exoplanet'],
+                        yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('XGBoost Confusion Matrix')
             ax.set_xlabel('Predicted')
             ax.set_ylabel('Actual')
             st.pyplot(fig)
-            
+
     with tab3:
         st.subheader("ROC Curve Comparison")
         fpr_cnn, tpr_cnn, _ = roc_curve(y_test, pred_cnn_proba)
@@ -280,14 +221,14 @@ def prediction_playground(train_df, test_df):
     st.header("🚀 Prediction Playground")
     st.markdown("---")
     st.info("Select a star from the test set to see the models' predictions.")
-    
+
     model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
-    
+
     y_test = test_df['LABEL'].values - 1
     X_test = test_df.drop('LABEL', axis=1).values
-    
+
     star_index = st.slider("Select a Star Index from the Test Set", 0, len(test_df) - 1, 0)
-    
+
     star_data = X_test[star_index]
     actual_label = "Exoplanet" if y_test[star_index] == 1 else "Not Exoplanet"
 
@@ -298,19 +239,17 @@ def prediction_playground(train_df, test_df):
     ax.set_xlabel("Time")
     ax.set_ylabel("Flux")
     st.pyplot(fig)
-    
+
     if st.button("Predict for this Star"):
         with st.spinner("Analyzing star..."):
-            # CNN Prediction
             cnn_input = star_data.reshape(1, -1, 1)
             cnn_prob = model_cnn.predict(cnn_input)[0][0]
             cnn_pred = "Exoplanet" if cnn_prob > 0.5 else "Not Exoplanet"
 
-            # XGBoost Prediction
             xgb_input = star_data.reshape(1, -1)
             xgb_prob = model_xgb.predict_proba(xgb_input)[0][1]
             xgb_pred = "Exoplanet" if xgb_prob > 0.5 else "Not Exoplanet"
-        
+
         st.subheader("Prediction Results")
         st.markdown(f"**Actual Label:** `{actual_label}`")
         col1, col2 = st.columns(2)
@@ -324,15 +263,12 @@ def prediction_playground(train_df, test_df):
             st.write(f"Confidence (is Exoplanet): {xgb_prob:.2%}")
 
 # --- Main App Logic ---
-# Load data once at the start
 summary_df, train_df, test_df = load_data()
 
-# Sidebar Navigation
 st.sidebar.title("Navigation")
 pages = ["🏠 Home", "📊 Data Explorer", "📈 Visual Analytics", "🤖 Model Performance", "🚀 Prediction Playground"]
 page = st.sidebar.radio("Go to", pages)
 
-# Page Routing
 if page == "🏠 Home":
     home()
 elif page == "📊 Data Explorer":
