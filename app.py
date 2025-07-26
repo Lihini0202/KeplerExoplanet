@@ -342,4 +342,4 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 Model Performance":
     model_performance(train_df, test_df)
 elif page == "🚀 Prediction Playground":
-    prediction_playground(train_df, test_df)  correct this code
+    prediction_playground(train_df, test_df)
