@@ -7,3 +7,4 @@ matplotlib==3.7.1
 seaborn==0.12.2
 xgboost==1.7.6
 requests==2.31.0
+beautifulsoup4
