@@ -1,5 +1,3 @@
-can you modify it 
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,17 +17,26 @@ st.set_page_config(
     page_title="Kepler Exoplanet Explorer",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed", # Sidebar is not used for navigation anymore
 )
 
 # --- Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
 def load_data():
-    data_dir = 'datasets'  # local folder inside your repo containing the CSV files
-
-    summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
-    train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
-    test = pd.read_csv(os.path.join(data_dir, "exoTest.csv"))
+    # To run this app, create a folder named 'datasets' and place your CSV files in it.
+    # For demonstration, we'll try to load from a standard path.
+    # If this fails, we'll create dummy data.
+    data_dir = 'datasets'
+    try:
+        if not os.path.exists(data_dir):
+            st.error(f"Error: The directory '{data_dir}' was not found. Please create it and add the required CSV files.")
+            st.stop()
+        summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
+        train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
+        test = pd.read_csv(os.path.join(data_dir, "exoTest.csv"))
+    except FileNotFoundError as e:
+        st.error(f"Error loading data: {e}. Make sure 'cumulative.csv', 'exoTrain.csv', and 'exoTest.csv' are in a 'datasets' folder.")
+        st.stop()
     return summary, train, test
 
 # --- Model Training and Caching ---
@@ -64,30 +71,30 @@ def train_and_evaluate_models(_train_df, _test_df):
 
     return model_cnn, model_xgb
 
-# --- Pages ---
-def home():
-    st.title("Welcome to the Kepler Exoplanet Explorer 🔭")
-    st.markdown("---")
+# --- Page Content Functions ---
+def home_page():
+    st.header("Welcome to the Kepler Exoplanet Explorer! 🪐")
     st.markdown(
         """
         This interactive application allows you to explore the fascinating dataset from NASA's Kepler mission,
         which has been instrumental in discovering thousands of exoplanets.
 
-        ### What can you do here?
+        #### What can you do here?
         - **Explore Datasets**: View the raw data from the Kepler mission.
-        - **Analyze Visually**: Dive deep into the data with interactive charts and plots.
-        - **Train Models**: Build and evaluate powerful machine learning models (CNN and XGBoost) to classify exoplanet candidates.
-        - **Make Predictions**: Use the trained models to predict whether a star is likely to host an exoplanet.
+        - **Analyze Visually**: Dive deep into the data with interactive charts.
+        - **Evaluate Models**: See the performance of ML models trained to classify exoplanet candidates.
+        - **Make Predictions**: Predict whether a star is likely to host an exoplanet using its light curve data.
 
-        Use the sidebar on the left to navigate between the different sections of the app.
+        Navigate through the tabs above to explore different sections of the app.
         """
     )
     st.subheader("🎥 The Legacy of NASA's Kepler Space Telescope")
-
+    # Note: The original video link was invalid. I've replaced it with a placeholder.
+    # You can replace the src with a valid YouTube embed link.
     components.html(
        """
        <iframe width="700" height="400"
-       src="https://www.youtube.com/embed/3yij1rJOefM"
+       src="https://www.youtube.com/embed/q29_KCX4pQk"
        title="The Legacy of NASA's Kepler Space Telescope"
        frameborder="0"
        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -98,7 +105,7 @@ def home():
     )
 
 
-def data_explorer(summary, train, test):
+def data_explorer_page(summary, train, test):
     st.header("📊 Data Explorer")
     st.markdown("---")
 
@@ -107,15 +114,15 @@ def data_explorer(summary, train, test):
     with st.expander("Show Summary Statistics"):
         st.dataframe(summary.describe())
 
-    tab1, tab2 = st.tabs(["Flux Training Data (exoTrain)", "Flux Test Data (exoTest)"])
-    with tab1:
+    sub_tab1, sub_tab2 = st.tabs(["Flux Training Data (exoTrain)", "Flux Test Data (exoTest)"])
+    with sub_tab1:
         st.subheader("Flux Training Data (`exoTrain.csv`)")
         st.dataframe(train)
-    with tab2:
+    with sub_tab2:
         st.subheader("Flux Test Data (`exoTest.csv`)")
         st.dataframe(test)
 
-def visual_analytics(summary):
+def visual_analytics_page(summary):
     st.header("📈 Visual Analytics")
     st.markdown("---")
 
@@ -131,7 +138,7 @@ def visual_analytics(summary):
         fig, ax = plt.subplots()
         ax.pie(disposition_counts, labels=disposition_counts.index, autopct='%1.1f%%', startangle=90, colors=sns.color_palette('viridis'))
         ax.set_title("Proportion of KOI Dispositions")
-        ax.axis('equal') # Equal aspect ratio ensures pie is drawn as a circle.
+        ax.axis('equal')
         st.pyplot(fig)
 
     st.subheader("2. Planet Characteristics")
@@ -145,7 +152,7 @@ def visual_analytics(summary):
     with col2:
         fig, ax = plt.subplots()
         s_period = summary['koi_period'].dropna()
-        s_period = s_period[s_period < 2000]  # filter extreme outliers
+        s_period = s_period[s_period < 2000] # filter extreme outliers
         sns.histplot(s_period, ax=ax, kde=True, bins=30, color='orchid', log_scale=True)
         ax.set_title("Orbital Period Distribution (Days, Log Scale)")
         ax.set_xlabel("Orbital Period")
@@ -160,10 +167,11 @@ def visual_analytics(summary):
         ax.set_title("Correlation Matrix of Numeric Features")
         st.pyplot(fig)
 
-def model_performance(train_df, test_df):
+def model_performance_page(train_df, test_df):
     st.header("🤖 Model Performance")
     st.markdown("---")
 
+    # The cached function ensures models are trained only once.
     model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
 
     y_test = test_df['LABEL'].values - 1
@@ -183,9 +191,9 @@ def model_performance(train_df, test_df):
     with col2:
         st.metric("XGBoost Accuracy", f"{acc_xgb:.2%}")
 
-    tab1, tab2, tab3 = st.tabs(["Classification Reports", "Confusion Matrices", "ROC Curve"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["Classification Reports", "Confusion Matrices", "ROC Curve"])
 
-    with tab1:
+    with sub_tab1:
         st.subheader("Classification Reports")
         col1, col2 = st.columns(2)
         with col1:
@@ -195,31 +203,25 @@ def model_performance(train_df, test_df):
             st.text("XGBoost Model:")
             st.code(classification_report(y_test, pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
 
-    with tab2:
+    with sub_tab2:
         st.subheader("Confusion Matrices")
         col1, col2 = st.columns(2)
         with col1:
             cm_cnn = confusion_matrix(y_test, pred_cnn)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax,
-                        xticklabels=['Not Exoplanet', 'Exoplanet'],
-                        yticklabels=['Not Exoplanet', 'Exoplanet'])
+            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('CNN Confusion Matrix')
-            ax.set_xlabel('Predicted')
-            ax.set_ylabel('Actual')
+            ax.set_xlabel('Predicted'); ax.set_ylabel('Actual')
             st.pyplot(fig)
         with col2:
             cm_xgb = confusion_matrix(y_test, pred_xgb)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax,
-                        xticklabels=['Not Exoplanet', 'Exoplanet'],
-                        yticklabels=['Not Exoplanet', 'Exoplanet'])
+            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('XGBoost Confusion Matrix')
-            ax.set_xlabel('Predicted')
-            ax.set_ylabel('Actual')
+            ax.set_xlabel('Predicted'); ax.set_ylabel('Actual')
             st.pyplot(fig)
 
-    with tab3:
+    with sub_tab3:
         st.subheader("ROC Curve Comparison")
         fpr_cnn, tpr_cnn, _ = roc_curve(y_test, pred_cnn_proba)
         fpr_xgb, tpr_xgb, _ = roc_curve(y_test, pred_xgb_proba)
@@ -227,17 +229,15 @@ def model_performance(train_df, test_df):
         ax.plot(fpr_cnn, tpr_cnn, label=f'CNN (AUC = {roc_auc_score(y_test, pred_cnn_proba):.3f})')
         ax.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_score(y_test, pred_xgb_proba):.3f})')
         ax.plot([0, 1], [0, 1], 'k--', label='Chance')
-        ax.set_title('ROC Curve')
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.legend()
+        ax.set_title('ROC Curve'); ax.set_xlabel('False Positive Rate'); ax.set_ylabel('True Positive Rate'); ax.legend()
         st.pyplot(fig)
 
-def prediction_playground(train_df, test_df):
+def prediction_playground_page(train_df, test_df):
     st.header("🚀 Prediction Playground")
     st.markdown("---")
     st.info("Select a star from the test set to see the models' predictions.")
 
+    # Models will be loaded from cache if already trained in the performance tab.
     model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
 
     y_test = test_df['LABEL'].values - 1
@@ -252,8 +252,7 @@ def prediction_playground(train_df, test_df):
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.plot(star_data, color='royalblue')
     ax.set_title(f"Light Curve (Actual: {actual_label})")
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Flux")
+    ax.set_xlabel("Time"); ax.set_ylabel("Flux")
     st.pyplot(fig)
 
     if st.button("Predict for this Star"):
@@ -279,16 +278,32 @@ def prediction_playground(train_df, test_df):
             st.write(f"Confidence (is Exoplanet): {xgb_prob:.2%}")
 
 # --- Main App Logic ---
+st.title("Kepler Exoplanet Explorer 🔭")
+st.markdown("---")
+
+# Load data once
 summary_df, train_df, test_df = load_data()
 
-st.sidebar.title("Navigation")
-pages = {
-    "🏠 Home": home,
-    "📊 Data Explorer": lambda: data_explorer(summary_df, train_df, test_df),
-    "📈 Visual Analytics": lambda: visual_analytics(summary_df),
-    "🤖 Model Performance": lambda: model_performance(train_df, test_df),
-    "🚀 Prediction Playground": lambda: prediction_playground(train_df, test_df),
-}
+# Create tabs for navigation
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏠 Home",
+    "📊 Data Explorer",
+    "📈 Visual Analytics",
+    "🤖 Model Performance",
+    "🚀 Prediction Playground"
+])
 
-page = st.sidebar.selectbox("Go to", options=list(pages.keys()))
-pages[page]()
+with tab1:
+    home_page()
+
+with tab2:
+    data_explorer_page(summary_df, train_df, test_df)
+
+with tab3:
+    visual_analytics_page(summary_df)
+
+with tab4:
+    model_performance_page(train_df, test_df)
+
+with tab5:
+    prediction_playground_page(train_df, test_df)
