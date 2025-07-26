@@ -23,8 +23,7 @@ st.set_page_config(
 # --- Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
 def load_data():
-    data_dir = 'datasets'  # local folder inside your repo containing the CSV files
-
+    data_dir = 'datasets'  # local folder containing your CSV files
     summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
     train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
     test = pd.read_csv(os.path.join(data_dir, "exoTest.csv"))
@@ -77,7 +76,7 @@ def home():
         - **Train Models**: Build and evaluate powerful machine learning models (CNN and XGBoost) to classify exoplanet candidates.
         - **Make Predictions**: Use the trained models to predict whether a star is likely to host an exoplanet.
 
-        Use the tabs above to navigate between the different sections of the app.
+        Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
     st.subheader("🎥 The Legacy of NASA's Kepler Space Telescope")
@@ -95,23 +94,21 @@ def home():
        height=420,
     )
 
-
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
     st.markdown("---")
 
     st.subheader("Kepler Objects of Interest (KOI) Summary Data")
     st.dataframe(summary)
+
     with st.expander("Show Summary Statistics"):
         st.dataframe(summary.describe())
 
-    tab1, tab2 = st.tabs(["Flux Training Data (exoTrain)", "Flux Test Data (exoTest)"])
-    with tab1:
-        st.subheader("Flux Training Data (`exoTrain.csv`)")
-        st.dataframe(train)
-    with tab2:
-        st.subheader("Flux Test Data (`exoTest.csv`)")
-        st.dataframe(test)
+    st.subheader("Flux Training Data (`exoTrain.csv`)")
+    st.dataframe(train)
+
+    st.subheader("Flux Test Data (`exoTest.csv`)")
+    st.dataframe(test)
 
 def visual_analytics(summary):
     st.header("📈 Visual Analytics")
@@ -129,7 +126,7 @@ def visual_analytics(summary):
         fig, ax = plt.subplots()
         ax.pie(disposition_counts, labels=disposition_counts.index, autopct='%1.1f%%', startangle=90, colors=sns.color_palette('viridis'))
         ax.set_title("Proportion of KOI Dispositions")
-        ax.axis('equal') # Equal aspect ratio ensures pie is drawn as a circle.
+        ax.axis('equal')
         st.pyplot(fig)
 
     st.subheader("2. Planet Characteristics")
@@ -143,7 +140,7 @@ def visual_analytics(summary):
     with col2:
         fig, ax = plt.subplots()
         s_period = summary['koi_period'].dropna()
-        s_period = s_period[s_period < 2000]  # filter extreme outliers
+        s_period = s_period[s_period < 2000]
         sns.histplot(s_period, ax=ax, kde=True, bins=30, color='orchid', log_scale=True)
         ax.set_title("Orbital Period Distribution (Days, Log Scale)")
         ax.set_xlabel("Orbital Period")
@@ -181,55 +178,50 @@ def model_performance(train_df, test_df):
     with col2:
         st.metric("XGBoost Accuracy", f"{acc_xgb:.2%}")
 
-    tab1, tab2, tab3 = st.tabs(["Classification Reports", "Confusion Matrices", "ROC Curve"])
+    st.subheader("Classification Reports")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text("CNN Model:")
+        st.code(classification_report(y_test, pred_cnn, target_names=['Not Exoplanet', 'Exoplanet']))
+    with col2:
+        st.text("XGBoost Model:")
+        st.code(classification_report(y_test, pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
 
-    with tab1:
-        st.subheader("Classification Reports")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.text("CNN Model:")
-            st.code(classification_report(y_test, pred_cnn, target_names=['Not Exoplanet', 'Exoplanet']))
-        with col2:
-            st.text("XGBoost Model:")
-            st.code(classification_report(y_test, pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
-
-    with tab2:
-        st.subheader("Confusion Matrices")
-        col1, col2 = st.columns(2)
-        with col1:
-            cm_cnn = confusion_matrix(y_test, pred_cnn)
-            fig, ax = plt.subplots()
-            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax,
-                        xticklabels=['Not Exoplanet', 'Exoplanet'],
-                        yticklabels=['Not Exoplanet', 'Exoplanet'])
-            ax.set_title('CNN Confusion Matrix')
-            ax.set_xlabel('Predicted')
-            ax.set_ylabel('Actual')
-            st.pyplot(fig)
-        with col2:
-            cm_xgb = confusion_matrix(y_test, pred_xgb)
-            fig, ax = plt.subplots()
-            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax,
-                        xticklabels=['Not Exoplanet', 'Exoplanet'],
-                        yticklabels=['Not Exoplanet', 'Exoplanet'])
-            ax.set_title('XGBoost Confusion Matrix')
-            ax.set_xlabel('Predicted')
-            ax.set_ylabel('Actual')
-            st.pyplot(fig)
-
-    with tab3:
-        st.subheader("ROC Curve Comparison")
-        fpr_cnn, tpr_cnn, _ = roc_curve(y_test, pred_cnn_proba)
-        fpr_xgb, tpr_xgb, _ = roc_curve(y_test, pred_xgb_proba)
+    st.subheader("Confusion Matrices")
+    col1, col2 = st.columns(2)
+    with col1:
+        cm_cnn = confusion_matrix(y_test, pred_cnn)
         fig, ax = plt.subplots()
-        ax.plot(fpr_cnn, tpr_cnn, label=f'CNN (AUC = {roc_auc_score(y_test, pred_cnn_proba):.3f})')
-        ax.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_score(y_test, pred_xgb_proba):.3f})')
-        ax.plot([0, 1], [0, 1], 'k--', label='Chance')
-        ax.set_title('ROC Curve')
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.legend()
+        sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax,
+                    xticklabels=['Not Exoplanet', 'Exoplanet'],
+                    yticklabels=['Not Exoplanet', 'Exoplanet'])
+        ax.set_title('CNN Confusion Matrix')
+        ax.set_xlabel('Predicted')
+        ax.set_ylabel('Actual')
         st.pyplot(fig)
+    with col2:
+        cm_xgb = confusion_matrix(y_test, pred_xgb)
+        fig, ax = plt.subplots()
+        sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax,
+                    xticklabels=['Not Exoplanet', 'Exoplanet'],
+                    yticklabels=['Not Exoplanet', 'Exoplanet'])
+        ax.set_title('XGBoost Confusion Matrix')
+        ax.set_xlabel('Predicted')
+        ax.set_ylabel('Actual')
+        st.pyplot(fig)
+
+    st.subheader("ROC Curve Comparison")
+    fpr_cnn, tpr_cnn, _ = roc_curve(y_test, pred_cnn_proba)
+    fpr_xgb, tpr_xgb, _ = roc_curve(y_test, pred_xgb_proba)
+    fig, ax = plt.subplots()
+    ax.plot(fpr_cnn, tpr_cnn, label=f'CNN (AUC = {roc_auc_score(y_test, pred_cnn_proba):.3f})')
+    ax.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_score(y_test, pred_xgb_proba):.3f})')
+    ax.plot([0, 1], [0, 1], 'k--', label='Chance')
+    ax.set_title('ROC Curve')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.legend()
+    st.pyplot(fig)
 
 def prediction_playground(train_df, test_df):
     st.header("🚀 Prediction Playground")
@@ -279,26 +271,15 @@ def prediction_playground(train_df, test_df):
 # --- Main App Logic ---
 summary_df, train_df, test_df = load_data()
 
-# Use tabs instead of sidebar navigation
-tabs = st.tabs([
-    "🏠 Home",
-    "📊 Data Explorer",
-    "📈 Visual Analytics",
-    "🤖 Model Performance",
-    "🚀 Prediction Playground"
-])
+st.sidebar.title("Navigation")
+pages = {
+    "🏠 Home": home,
+    "📊 Data Explorer": lambda: data_explorer(summary_df, train_df, test_df),
+    "📈 Visual Analytics": lambda: visual_analytics(summary_df),
+    "🤖 Model Performance": lambda: model_performance(train_df, test_df),
+    "🚀 Prediction Playground": lambda: prediction_playground(train_df, test_df),
+}
 
-with tabs[0]:
-    home()
-
-with tabs[1]:
-    data_explorer(summary_df, train_df, test_df)
-
-with tabs[2]:
-    visual_analytics(summary_df)
-
-with tabs[3]:
-    model_performance(train_df, test_df)
-
-with tabs[4]:
-    prediction_playground(train_df, test_df)
+# Use radio buttons for navigation (clear and no dropdown)
+page = st.sidebar.radio("Go to", options=list(pages.keys()))
+pages[page]()
