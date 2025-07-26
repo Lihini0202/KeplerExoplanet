@@ -98,7 +98,13 @@ def cnn_fold_evaluator(test_df):
 
     model_path = f"models/exoplanet_cnn_fold{selected_fold}.keras"
     if os.path.exists(model_path):
-        model = load_model(model_path)
+        try:
+            # ✅ FIX: Use compile=False to avoid missing custom losses/metrics on deployment
+            model = load_model(model_path, compile=False)
+        except Exception as e:
+            st.error(f"Error loading model: {e}")
+            return
+
         y_pred = (model.predict(X_test_cnn) > 0.5).astype("int").ravel()
         acc = accuracy_score(y_test, y_pred)
 
