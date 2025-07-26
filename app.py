@@ -80,7 +80,7 @@ def home():
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/ExoplanetComparison_Kepler-20e_Kepler-20f_Earth_PIA15681.jpg/800px-ExoplanetComparison_Kepler-20e_Kepler-20f_Earth_PIA15681.jpg")
+    st.image("https://upload.wikimedia.org/wikipedia/commons/8/8d/Kepler_Space_Telescope_spacecraft_model_2.png", use_column_width=True)
 
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
