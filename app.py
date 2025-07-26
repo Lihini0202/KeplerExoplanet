@@ -6,13 +6,11 @@ import seaborn as sns
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Conv1D, MaxPooling1D, GlobalAveragePooling1D, Dense, Dropout, BatchNormalization
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
 import xgboost as xgb
 import requests
 import os
-import time
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -65,7 +63,13 @@ def load_data():
 
 # --- Model Training and Caching ---
 @st.cache_resource(show_spinner="Training models... this can take a few minutes.")
-def train_and_evaluate_models(X_train, y_train, X_test, y_test):
+def train_and_evaluate_models(_train_df, _test_df):
+    # Prepare data inside the function to ensure cache safety
+    y_train = _train_df['LABEL'].values - 1
+    X_train = _train_df.drop('LABEL', axis=1).values
+    y_test = _test_df['LABEL'].values - 1
+    X_test = _test_df.drop('LABEL', axis=1).values
+
     # CNN Model
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
@@ -87,14 +91,11 @@ def train_and_evaluate_models(X_train, y_train, X_test, y_test):
     model_cnn.fit(X_train_cnn, y_train, epochs=20, batch_size=64, validation_split=0.2, 
                   callbacks=[EarlyStopping(patience=5, restore_best_weights=True)], verbose=0)
     
-    pred_cnn_proba = model_cnn.predict(X_test_cnn).ravel()
-    
     # XGBoost Model
     model_xgb = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss', n_estimators=150, learning_rate=0.1, max_depth=5)
     model_xgb.fit(X_train, y_train)
-    pred_xgb_proba = model_xgb.predict_proba(X_test)[:, 1]
     
-    return model_cnn, model_xgb, pred_cnn_proba, pred_xgb_proba
+    return model_cnn, model_xgb
 
 # --- Pages ---
 def home():
@@ -179,14 +180,15 @@ def model_performance(train_df, test_df):
     st.header("🤖 Model Performance")
     st.markdown("---")
 
-    y_train = train_df['LABEL'].values - 1
-    X_train = train_df.drop('LABEL', axis=1).values
+    model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
+    
     y_test = test_df['LABEL'].values - 1
     X_test = test_df.drop('LABEL', axis=1).values
-
-    model_cnn, model_xgb, pred_cnn_proba, pred_xgb_proba = train_and_evaluate_models(X_train, y_train, X_test, y_test)
     
+    # Get predictions
+    pred_cnn_proba = model_cnn.predict(X_test.reshape(X_test.shape[0], X_test.shape[1], 1)).ravel()
     pred_cnn = (pred_cnn_proba > 0.5).astype(int)
+    pred_xgb_proba = model_xgb.predict_proba(X_test)[:, 1]
     pred_xgb = (pred_xgb_proba > 0.5).astype(int)
     
     st.subheader("Model Accuracy Scores")
@@ -238,20 +240,15 @@ def model_performance(train_df, test_df):
         ax.legend()
         st.pyplot(fig)
 
-
-def prediction_playground(test_df):
+def prediction_playground(train_df, test_df):
     st.header("🚀 Prediction Playground")
     st.markdown("---")
     st.info("Select a star from the test set to see the models' predictions.")
     
-    # We need to re-train the models here or load them if saved
-    # For simplicity in this example, we re-train, but in production you'd load saved models
-    y_train = train_df['LABEL'].values - 1
-    X_train = train_df.drop('LABEL', axis=1).values
+    model_cnn, model_xgb = train_and_evaluate_models(train_df, test_df)
+    
     y_test = test_df['LABEL'].values - 1
     X_test = test_df.drop('LABEL', axis=1).values
-    
-    model_cnn, model_xgb, _, _ = train_and_evaluate_models(X_train, y_train, X_test, y_test)
     
     star_index = st.slider("Select a Star Index from the Test Set", 0, len(test_df) - 1, 0)
     
@@ -267,25 +264,26 @@ def prediction_playground(test_df):
     st.pyplot(fig)
     
     if st.button("Predict for this Star"):
-        # CNN Prediction
-        cnn_input = star_data.reshape(1, -1, 1)
-        cnn_prob = model_cnn.predict(cnn_input)[0][0]
-        cnn_pred = "Exoplanet" if cnn_prob > 0.5 else "Not Exoplanet"
+        with st.spinner("Analyzing star..."):
+            # CNN Prediction
+            cnn_input = star_data.reshape(1, -1, 1)
+            cnn_prob = model_cnn.predict(cnn_input)[0][0]
+            cnn_pred = "Exoplanet" if cnn_prob > 0.5 else "Not Exoplanet"
 
-        # XGBoost Prediction
-        xgb_input = star_data.reshape(1, -1)
-        xgb_prob = model_xgb.predict_proba(xgb_input)[0][1]
-        xgb_pred = "Exoplanet" if xgb_prob > 0.5 else "Not Exoplanet"
+            # XGBoost Prediction
+            xgb_input = star_data.reshape(1, -1)
+            xgb_prob = model_xgb.predict_proba(xgb_input)[0][1]
+            xgb_pred = "Exoplanet" if xgb_prob > 0.5 else "Not Exoplanet"
         
         st.subheader("Prediction Results")
         col1, col2 = st.columns(2)
         with col1:
             st.metric("CNN Prediction", cnn_pred)
-            st.progress(cnn_prob)
+            st.progress(float(cnn_prob))
             st.write(f"Confidence: {cnn_prob:.2%}")
         with col2:
             st.metric("XGBoost Prediction", xgb_pred)
-            st.progress(xgb_prob)
+            st.progress(float(xgb_prob))
             st.write(f"Confidence: {xgb_prob:.2%}")
 
 # --- Main App Logic ---
@@ -293,7 +291,9 @@ summary_df, train_df, test_df = load_data()
 
 # Sidebar Navigation
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["🏠 Home", "📊 Data Explorer", "📈 Visual Analytics", "🤖 Model Performance", "🚀 Prediction Playground"])
+# Use a list for the radio options
+pages = ["🏠 Home", "📊 Data Explorer", "📈 Visual Analytics", "🤖 Model Performance", "🚀 Prediction Playground"]
+page = st.sidebar.radio("Go to", pages)
 
 # Page Routing
 if page == "🏠 Home":
@@ -305,4 +305,5 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 Model Performance":
     model_performance(train_df, test_df)
 elif page == "🚀 Prediction Playground":
-    prediction_playground(test_df)
+    # CORRECTED: Pass both train_df and test_df
+    prediction_playground(train_df, test_df)
