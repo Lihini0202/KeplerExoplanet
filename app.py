@@ -281,16 +281,13 @@ def prediction_playground(train_df, test_df):
 summary_df, train_df, test_df = load_data()
 
 st.sidebar.title("Navigation")
-pages = ["🏠 Home", "📊 Data Explorer", "📈 Visual Analytics", "🤖 Model Performance", "🚀 Prediction Playground"]
-page = st.sidebar.radio("Go to", pages)
+pages = {
+    "🏠 Home": home,
+    "📊 Data Explorer": lambda: data_explorer(summary_df, train_df, test_df),
+    "📈 Visual Analytics": lambda: visual_analytics(summary_df),
+    "🤖 Model Performance": lambda: model_performance(train_df, test_df),
+    "🚀 Prediction Playground": lambda: prediction_playground(train_df, test_df),
+}
 
-if page == "🏠 Home":
-    home()
-elif page == "📊 Data Explorer":
-    data_explorer(summary_df, train_df, test_df)
-elif page == "📈 Visual Analytics":
-    visual_analytics(summary_df)
-elif page == "🤖 Model Performance":
-    model_performance(train_df, test_df)
-elif page == "🚀 Prediction Playground":
-    prediction_playground(train_df, test_df)
+page = st.sidebar.selectbox("Go to", options=list(pages.keys()))
+pages[page]()
