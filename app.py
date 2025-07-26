@@ -29,6 +29,11 @@ def load_data():
 def load_xgb_model():
     return joblib.load("models/xgb_model.pkl")
 
+# --- Load Label Encoder ---
+@st.cache_resource
+def load_label_encoder():
+    return joblib.load("models/label_encoder.pkl")
+
 # --- Page: Home ---
 def home():
     st.title("🔭 Kepler Exoplanet Explorer")
@@ -90,7 +95,7 @@ def cnn_fold_evaluator(test_df):
     st.header("📊 CNN Fold Evaluation")
 
     X_test = test_df.drop("LABEL", axis=1).values
-    y_test = test_df["LABEL"].values - 1
+    y_test = test_df["LABEL"].values - 1  # assuming labels are 1 & 2
     X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
 
     folds = [1, 2, 3, 4, 5]
@@ -99,7 +104,6 @@ def cnn_fold_evaluator(test_df):
     model_path = f"models/exoplanet_cnn_fold{selected_fold}.keras"
     if os.path.exists(model_path):
         try:
-            # ✅ FIX: Use compile=False to avoid missing custom losses/metrics on deployment
             model = load_model(model_path, compile=False)
         except Exception as e:
             st.error(f"Error loading model: {e}")
@@ -156,6 +160,7 @@ def prediction_playground(test_df, model):
 # --- Main Driver ---
 summary_df, train_df, test_df = load_data()
 xgb_model = load_xgb_model()
+label_encoder = load_label_encoder()  # Load label encoder if needed
 
 st.sidebar.title("🌌 Navigation")
 page = st.sidebar.radio("Go to", [
