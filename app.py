@@ -80,7 +80,7 @@ def home():
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
-    st.image("https://www.nasa.gov/wp-content/uploads/2023/04/kepler-artwork-1-final.jpg", caption="Artistic impression of the Kepler Space Telescope. Image Credit: NASA")
+    st.image("https://www.google.com/imgres?q=Artistic%20impression%20of%20the%20Kepler%20Space%20Telescope.%20Image%20Credit%3A%20NASA&imgurl=http%3A%2F%2Fastronomynow.com%2Fwp-content%2Fuploads%2F2016%2F04%2FKepler_K2_640x480.jpg&imgrefurl=https%3A%2F%2Fastronomynow.com%2F2016%2F07%2F19%2Fnasas-kepler-space-telescope-confirms-100-exoplanets-during-its-k2-mission%2F&docid=amlN-h0IYFtbwM&tbnid=PodYymrvgamMCM&vet=12ahUKEwjXkJSImduOAxW_2DgGHUsJK0gQM3oECCAQAA..i&w=640&h=480&hcb=2&ved=2ahUKEwjXkJSImduOAxW_2DgGHUsJK0gQM3oECCAQAA", caption="Artistic impression of the Kepler Space Telescope. Image Credit: NASA")
 
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
