@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,8 +10,8 @@ from tensorflow.keras.layers import Input, Conv1D, MaxPooling1D, GlobalAveragePo
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
 import xgboost as xgb
+import requests
 import os
-import gdown  
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -20,15 +21,52 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- REPLACED HELPER FUNCTION ---
+# --- MODIFIED HELPER FUNCTION ---
 def download_file_from_google_drive(id, destination):
-    if not os.path.exists(destination):
-        st.info(f"Downloading {os.path.basename(destination)}. This may take a few minutes...")
-        url = f"https://drive.google.com/uc?id={id}"
-        gdown.download(url, destination, quiet=False)
-        st.success(f"Downloaded {os.path.basename(destination)}!")
-    else:
-        st.success(f"{os.path.basename(destination)} already exists, skipping download.")
+    """
+    Handles downloading files from Google Drive, including the confirmation
+    step for large files that trigger a virus scan warning.
+    """
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+
+    # Initial request to get the confirmation token
+    response = session.get(URL, params={'id': id}, stream=True)
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+    
+    # If a token was found, make a second request with the confirmation
+    if token:
+        params = {'id': id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024
+    
+    progress_bar = st.progress(0, text=f"Downloading {os.path.basename(destination)}...")
+    bytes_written = 0
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(block_size):
+            if chunk:
+                f.write(chunk)
+                bytes_written += len(chunk)
+                progress_value = min(bytes_written / total_size, 1.0) if total_size > 0 else 0
+                # Update progress bar text and value
+                if total_size > 0:
+                    mb_written = bytes_written / (1024 * 1024)
+                    total_mb = total_size / (1024 * 1024)
+                    progress_text = f"Downloading {os.path.basename(destination)}... {mb_written:.1f}MB / {total_mb:.1f}MB"
+                else:
+                    progress_text = f"Downloading {os.path.basename(destination)}..."
+                progress_bar.progress(progress_value, text=progress_text)
+    
+    # Ensure the progress bar completes and then disappears
+    progress_bar.progress(1.0, text=f"Download complete: {os.path.basename(destination)}")
+    st.balloons() # A little celebration for a successful download
+    progress_bar.empty()
 
 # --- Caching and Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
@@ -44,13 +82,13 @@ def load_data():
     }
 
     for filepath, file_id in file_ids.items():
-        download_file_from_google_drive(file_id, filepath)
+        if not os.path.exists(filepath):
+            download_file_from_google_drive(file_id, filepath)
 
     summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
     train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
     test = pd.read_csv(os.path.join(data_dir, "exoTest.csv"))
     return summary, train, test
-
 
 # --- Model Training and Caching ---
 @st.cache_resource(show_spinner="Training models... this can take a few minutes.")
@@ -304,4 +342,4 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 Model Performance":
     model_performance(train_df, test_df)
 elif page == "🚀 Prediction Playground":
-    prediction_playground(train_df, test_df)
+    prediction_playground(train_df, test_df)  correct this code
