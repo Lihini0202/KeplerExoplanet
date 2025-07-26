@@ -20,12 +20,28 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- Helper function to download file from Google Drive ---
+# --- MODIFIED HELPER FUNCTION ---
 def download_file_from_google_drive(id, destination):
+    """
+    Handles downloading files from Google Drive, including the confirmation
+    step for large files that trigger a virus scan warning.
+    """
     URL = "https://docs.google.com/uc?export=download"
     session = requests.Session()
+
+    # Initial request to get the confirmation token
     response = session.get(URL, params={'id': id}, stream=True)
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
     
+    # If a token was found, make a second request with the confirmation
+    if token:
+        params = {'id': id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+
     total_size = int(response.headers.get('content-length', 0))
     block_size = 1024
     
@@ -37,28 +53,40 @@ def download_file_from_google_drive(id, destination):
                 f.write(chunk)
                 bytes_written += len(chunk)
                 progress_value = min(bytes_written / total_size, 1.0) if total_size > 0 else 0
-                progress_bar.progress(progress_value, text=f"Downloading {os.path.basename(destination)}...")
+                # Update progress bar text and value
+                if total_size > 0:
+                    mb_written = bytes_written / (1024 * 1024)
+                    total_mb = total_size / (1024 * 1024)
+                    progress_text = f"Downloading {os.path.basename(destination)}... {mb_written:.1f}MB / {total_mb:.1f}MB"
+                else:
+                    progress_text = f"Downloading {os.path.basename(destination)}..."
+                progress_bar.progress(progress_value, text=progress_text)
+    
+    # Ensure the progress bar completes and then disappears
+    progress_bar.progress(1.0, text=f"Download complete: {os.path.basename(destination)}")
+    st.balloons() # A little celebration for a successful download
     progress_bar.empty()
 
 # --- Caching and Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
 def load_data():
-    if not os.path.exists('data'):
-        os.makedirs('data')
+    data_dir = 'data'
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
 
     file_ids = {
-        "data/cumulative.csv": "1ko0CO920amqyw6Trc3Xxp1Z72l4xC5Fc",
-        "data/exoTrain.csv": "1MxDUIqQ6S9cmi068I62xkbCwZHkpAeJI",
-        "data/exoTest.csv": "1d3bAfqatHaUWlRhc70YHW_Ay_co_ZmVu"
+        os.path.join(data_dir, "cumulative.csv"): "1ko0CO920amqyw6Trc3Xxp1Z72l4xC5Fc",
+        os.path.join(data_dir, "exoTrain.csv"): "1MxDUIqQ6S9cmi068I62xkbCwZHkpAeJI",
+        os.path.join(data_dir, "exoTest.csv"): "1d3bAfqatHaUWlRhc70YHW_Ay_co_ZmVu"
     }
 
     for filepath, file_id in file_ids.items():
         if not os.path.exists(filepath):
             download_file_from_google_drive(file_id, filepath)
 
-    summary = pd.read_csv("data/cumulative.csv")
-    train = pd.read_csv("data/exoTrain.csv")
-    test = pd.read_csv("data/exoTest.csv")
+    summary = pd.read_csv(os.path.join(data_dir, "cumulative.csv"))
+    train = pd.read_csv(os.path.join(data_dir, "exoTrain.csv"))
+    test = pd.read_csv(os.path.join(data_dir, "exoTest.csv"))
     return summary, train, test
 
 # --- Model Training and Caching ---
@@ -67,12 +95,9 @@ def train_and_evaluate_models(_train_df, _test_df):
     # Prepare data inside the function to ensure cache safety
     y_train = _train_df['LABEL'].values - 1
     X_train = _train_df.drop('LABEL', axis=1).values
-    y_test = _test_df['LABEL'].values - 1
-    X_test = _test_df.drop('LABEL', axis=1).values
-
+    
     # CNN Model
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
-    X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
     
     inp = Input(shape=(X_train_cnn.shape[1], 1))
     x = Conv1D(64, 5, activation='relu', padding='same')(inp)
@@ -150,6 +175,7 @@ def visual_analytics(summary):
         fig, ax = plt.subplots()
         ax.pie(disposition_counts, labels=disposition_counts.index, autopct='%1.1f%%', startangle=90, colors=sns.color_palette('viridis'))
         ax.set_title("Proportion of KOI Dispositions")
+        ax.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
         st.pyplot(fig)
 
     st.subheader("2. Planet Characteristics")
@@ -162,7 +188,10 @@ def visual_analytics(summary):
         st.pyplot(fig)
     with col2:
         fig, ax = plt.subplots()
-        sns.histplot(summary['koi_period'].dropna(), ax=ax, kde=True, bins=30, color='orchid', log_scale=True)
+        # Filter out extreme outliers for a better plot, but keep log scale
+        s_period = summary['koi_period'].dropna()
+        s_period = s_period[s_period < 2000] # Adjust this value if needed
+        sns.histplot(s_period, ax=ax, kde=True, bins=30, color='orchid', log_scale=True)
         ax.set_title("Orbital Period Distribution (Days, Log Scale)")
         ax.set_xlabel("Orbital Period")
         st.pyplot(fig)
@@ -192,19 +221,25 @@ def model_performance(train_df, test_df):
     pred_xgb = (pred_xgb_proba > 0.5).astype(int)
     
     st.subheader("Model Accuracy Scores")
+    col1, col2 = st.columns(2)
     acc_cnn = accuracy_score(y_test, pred_cnn)
     acc_xgb = accuracy_score(y_test, pred_xgb)
-    st.metric("CNN Accuracy", f"{acc_cnn:.2%}")
-    st.metric("XGBoost Accuracy", f"{acc_xgb:.2%}")
+    with col1:
+        st.metric("CNN Accuracy", f"{acc_cnn:.2%}")
+    with col2:
+        st.metric("XGBoost Accuracy", f"{acc_xgb:.2%}")
 
     tab1, tab2, tab3 = st.tabs(["Classification Reports", "Confusion Matrices", "ROC Curve"])
     
     with tab1:
         st.subheader("Classification Reports")
-        st.text("CNN Model:")
-        st.code(classification_report(y_test, pred_cnn, target_names=['Not Exoplanet', 'Exoplanet']))
-        st.text("XGBoost Model:")
-        st.code(classification_report(y_test, pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text("CNN Model:")
+            st.code(classification_report(y_test, pred_cnn, target_names=['Not Exoplanet', 'Exoplanet']))
+        with col2:
+            st.text("XGBoost Model:")
+            st.code(classification_report(y_test, pred_xgb, target_names=['Not Exoplanet', 'Exoplanet']))
 
     with tab2:
         st.subheader("Confusion Matrices")
@@ -212,7 +247,7 @@ def model_performance(train_df, test_df):
         with col1:
             cm_cnn = confusion_matrix(y_test, pred_cnn)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax, xticklabels=['No', 'Yes'], yticklabels=['No', 'Yes'])
+            sns.heatmap(cm_cnn, annot=True, fmt='d', cmap='Blues', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('CNN Confusion Matrix')
             ax.set_xlabel('Predicted')
             ax.set_ylabel('Actual')
@@ -220,7 +255,7 @@ def model_performance(train_df, test_df):
         with col2:
             cm_xgb = confusion_matrix(y_test, pred_xgb)
             fig, ax = plt.subplots()
-            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax, xticklabels=['No', 'Yes'], yticklabels=['No', 'Yes'])
+            sns.heatmap(cm_xgb, annot=True, fmt='d', cmap='Greens', ax=ax, xticklabels=['Not Exoplanet', 'Exoplanet'], yticklabels=['Not Exoplanet', 'Exoplanet'])
             ax.set_title('XGBoost Confusion Matrix')
             ax.set_xlabel('Predicted')
             ax.set_ylabel('Actual')
@@ -276,22 +311,23 @@ def prediction_playground(train_df, test_df):
             xgb_pred = "Exoplanet" if xgb_prob > 0.5 else "Not Exoplanet"
         
         st.subheader("Prediction Results")
+        st.markdown(f"**Actual Label:** `{actual_label}`")
         col1, col2 = st.columns(2)
         with col1:
             st.metric("CNN Prediction", cnn_pred)
             st.progress(float(cnn_prob))
-            st.write(f"Confidence: {cnn_prob:.2%}")
+            st.write(f"Confidence (is Exoplanet): {cnn_prob:.2%}")
         with col2:
             st.metric("XGBoost Prediction", xgb_pred)
             st.progress(float(xgb_prob))
-            st.write(f"Confidence: {xgb_prob:.2%}")
+            st.write(f"Confidence (is Exoplanet): {xgb_prob:.2%}")
 
 # --- Main App Logic ---
+# Load data once at the start
 summary_df, train_df, test_df = load_data()
 
 # Sidebar Navigation
 st.sidebar.title("Navigation")
-# Use a list for the radio options
 pages = ["🏠 Home", "📊 Data Explorer", "📈 Visual Analytics", "🤖 Model Performance", "🚀 Prediction Playground"]
 page = st.sidebar.radio("Go to", pages)
 
@@ -305,5 +341,4 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 Model Performance":
     model_performance(train_df, test_df)
 elif page == "🚀 Prediction Playground":
-    # CORRECTED: Pass both train_df and test_df
     prediction_playground(train_df, test_df)
