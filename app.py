@@ -79,8 +79,21 @@ def home():
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
-    st.image("https://www.nasa.gov/wp-content/uploads/2023/04/kepler-artwork-1-final.jpg", caption="Artistic impression of the Kepler Space Telescope. Image Credit: NASA")
+    st.subheader("🎥 The Legacy of NASA's Kepler Space Telescope")
 
+    components.html(
+        """
+        <iframe width="700" height="400"
+        src="https://www.youtube.com/embed/3yij1rJOefM"
+        title="The Legacy of NASA's Kepler Space Telescope"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen>
+        </iframe>
+        """,
+        height=420,
+    )
+ 
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
     st.markdown("---")
