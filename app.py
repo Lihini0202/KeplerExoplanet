@@ -23,9 +23,7 @@ st.set_page_config(
 # --- Data Loading ---
 @st.cache_data(show_spinner="Loading datasets...")
 def load_data():
-    # To run this app, create a folder named 'datasets' and place your CSV files in it.
-    # For demonstration, we'll try to load from a standard path.
-    # If this fails, we'll create dummy data.
+
     data_dir = 'datasets'
     try:
         if not os.path.exists(data_dir):
@@ -89,12 +87,11 @@ def home_page():
         """
     )
     st.subheader("🎥 The Legacy of NASA's Kepler Space Telescope")
-    # Note: The original video link was invalid. I've replaced it with a placeholder.
-    # You can replace the src with a valid YouTube embed link.
+
     components.html(
        """
        <iframe width="700" height="400"
-       src="https://www.youtube.com/embed/q29_KCX4pQk"
+       src="https://www.youtube.com/embed/3yij1rJOefM"
        title="The Legacy of NASA's Kepler Space Telescope"
        frameborder="0"
        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -103,7 +100,6 @@ def home_page():
        """,
        height=420,
     )
-
 
 def data_explorer_page(summary, train, test):
     st.header("📊 Data Explorer")
