@@ -80,8 +80,21 @@ def home():
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
-    st.subheader("🎥 Watch: The Legacy of NASA's Kepler Space Telescope")
-    st.markdown("[Watch on YouTube](https://www.youtube.com/watch?v=3yij1rJOefM)")
+    st.subheader("🎥 The Legacy of NASA's Kepler Space Telescope")
+
+    components.html(
+       """
+       <iframe width="700" height="400"
+       src="https://www.youtube.com/embed/3yij1rJOefM"
+       title="The Legacy of NASA's Kepler Space Telescope"
+       frameborder="0"
+       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+       allowfullscreen>
+       </iframe>
+       """,
+       height=420,
+    )
+
 
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
