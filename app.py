@@ -80,11 +80,8 @@ def home():
         Use the sidebar on the left to navigate between the different sections of the app.
         """
     )
-    # ✅ Direct image link from Wikimedia Commons
-    image_url = "https://upload.wikimedia.org/wikipedia/commons/8/8d/Kepler_Space_Telescope_spacecraft_model_2.png"
-
-    # ✅ Display the image
-    st.image(image_url, caption="NASA's Kepler Space Telescope", use_column_width=True)
+    st.subheader("🎥 Watch: The Legacy of NASA's Kepler Space Telescope")
+    st.markdown("[Watch on YouTube](https://www.youtube.com/watch?v=3yij1rJOefM)")
 
 def data_explorer(summary, train, test):
     st.header("📊 Data Explorer")
